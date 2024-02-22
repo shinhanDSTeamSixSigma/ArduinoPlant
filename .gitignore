@@ -1,0 +1,9 @@
+#라이브러리
+libraries
+libraries/*
+
+#partitions
+partitions.csv
+
+#skip.esp 파일
+*.esp32c3
