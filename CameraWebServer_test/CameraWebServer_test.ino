@@ -47,13 +47,18 @@ const char* serverName = "http://192.168.0.135:8090/fromArduino/sensor";
 char jsonOutput[128];
 void startCameraServer();
 void setupLedFlash(int pin);
-
+int solid_humid;
+int lumen;
+int humidity;
+int thomer;
+HardwareSerial mySerial(2); //3개의 시리얼 중 2번 채널을 사용
+bool isWatered = false;
 void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
-  SerialH.begin(9600);
+  mySerial.begin(115200, SERIAL_8N1, 12, 13); //추가로 사용할 시리얼. RX:12 / TX:13번 핀 사용
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -74,7 +79,8 @@ void setup() {
   config.pin_sccb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000; //20 fps
+  //config.xclk_freq_hz = 20000000; //20 fps
+  config.xclk_freq_hz = 5000000; //5 fps
   config.frame_size = FRAMESIZE_UXGA;
   config.pixel_format = PIXFORMAT_JPEG; // for streaming
   //config.pixel_format = PIXFORMAT_RGB565; // for face detection/recognition
@@ -168,7 +174,19 @@ void setup() {
   Serial.print("  ");
   Serial.print(WiFi.subnetMask());
   Serial.println("' to connect");
-  
+  solid_humid = 0;
+  lumen = 0;
+  humidity = 0;
+  thomer = 0;
+}
+void watering(){
+  if(isWatered){
+    isWatered = false;
+    if(mySerial.available() > 0){
+      mySerial.write(1);
+      mySerial.println(".");
+    }
+  }
 }
 
 void loop() {
@@ -183,11 +201,34 @@ void loop() {
     StaticJsonDocument<CAPACITY> doc;
 
     JsonObject object = doc.to<JsonObject>();
-    object["crop_no"] = "3";
-    object["thomer"] = "2024";
-    object["humidity"] = "1996";
-    object["lumen"] = "115";
-    object["solid_humid"] = "512";
+
+    
+    solid_humid = 0;
+    lumen = 0;
+    humidity = 0;
+    thomer = 0;
+    if(mySerial.available() > 0){
+      /*String command = mySerial.readStringUntil('.');
+      thomer = command.toInt();
+      command = mySerial.readStringUntil('.');
+      humidity = command.toInt();
+      command = mySerial.readStringUntil('.');
+      lumen = command.toInt();
+      command = mySerial.readStringUntil('_');
+      solid_humid = command.toInt();*/
+      thomer = mySerial.parseInt();
+      humidity = mySerial.parseInt();
+      lumen = mySerial.parseInt();
+      solid_humid = mySerial.parseInt();
+
+      watering();
+    }
+
+    object["crop_no"] = "2";
+    object["thomer"] = String(thomer);
+    object["humidity"] = String(humidity);
+    object["lumen"] = String(lumen);
+    object["solid_humid"] = String(solid_humid);
     serializeJson(doc,jsonOutput);
 
     //String httpRequestData = "crop_no="+String(1)+"&thomer="+String(50);
