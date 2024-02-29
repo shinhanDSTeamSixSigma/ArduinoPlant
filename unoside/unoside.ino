@@ -20,44 +20,52 @@ void setup() {
   pinMode(10,OUTPUT);
 }
 void watering(){
-  if(mySerial.available() > 0){
-      mySerial.readBytesUntil(".");
+  /*if(mySerial.available() > 0){
+      mySerial.readBytesUntil('.');
       isWater = true;
-  }
+  }*/
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+  
+    digitalWrite(9,HIGH);
+    delay(5000);
+    digitalWrite(9,LOW);
   soil = analogRead(A1);
   thomer = dht.readTemperature();
   humid = dht.readHumidity();
   lux = analogRead(A3);
   //200~1000 사이 값을 변경
   soil = map(soil,1023, 200, 0 ,100);
-  //210 ~50 사이 값을 변경
-  lux = map(lux, 210, 50, 0, 100);
+  //900 ~100 사이 값을 변경
+  lux = map(lux, 900, 100, 0, 100);
 
 
-  mySerial.write(thomer);
+  mySerial.print(thomer);
   mySerial.print(",");
-  mySerial.write(humid);
+  mySerial.print(humid);
   mySerial.print(",");
-  mySerial.write(lux);
+  mySerial.print(lux);
   mySerial.print(",");
-  mySerial.write(soil);
-  Serial.write(thomer);
+  mySerial.print(soil);
+  mySerial.print("\n");
+  
+  Serial.print(thomer);
   Serial.print(",");
-  Serial.write(humid);
+  Serial.print(humid);
   Serial.print(",");
-  Serial.write(lux);
+  Serial.print(lux);
   Serial.print(",");
-  Serial.write(soil);
+  Serial.print(soil);
+  Serial.print("\n");
   watering();
-  if(isWater){
+  if(true){
+    delay(300000);
     digitalWrite(9,HIGH);
     delay(5000);
     digitalWrite(9,LOW);
-    delay(58000);
+    delay(1200000);
   }else{
     delay(60000);
   }

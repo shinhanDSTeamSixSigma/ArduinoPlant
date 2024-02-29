@@ -57,7 +57,7 @@ HardwareSerial mySerial(2); //3개의 시리얼 중 2번 채널을 사용
 bool isWatered = false;
 int httpResponseCode = 0;
 
-WebServer server(83);
+WebServer server(82);
 
 WiFiClient client;
 
@@ -70,7 +70,8 @@ void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
-  mySerial.begin(9600, SERIAL_8N1, 12, 13); //추가로 사용할 시리얼. RX:12 / TX:13번 핀 사용
+  Serial.println("test!!!!!!!!!");
+  //mySerial.begin(9600, SERIAL_8N1, 12, 13); //추가로 사용할 시리얼. RX:12 / TX:13번 핀 사용
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -190,10 +191,17 @@ void setup() {
   lumen = 0;
   humidity = 0;
   thomer = 0;
-  server.on("/water",HTTP_POST,watering);
-  server.begin();
+  //server.on("/water",HTTP_POST,watering);
+  //server.begin();
+
   
+  WiFiClientSecure *client = new WiFiClientSecure;
+  client -> setInsecure(); //don't use SSL
 }
+
+
+
+
 void watering(){
   isWatered=true;
   if(isWatered){
@@ -203,8 +211,40 @@ void watering(){
       server.send(200,"text/plain","done");
   }
 }
-/*
-String sendPhoto() {
+
+void sendPhoto() {
+  
+  
+  HTTPClient https;
+  https.begin(imageServer);
+  https.addHeader("Content-Type", "multipart/form-data");
+  String imageData = "";
+  camera_fb_t *fb = NULL;
+  fb = esp_camera_fb_get();
+  if(!fb){
+    Serial.print("Error on Sending Image");
+    esp_camera_fb_return(fb);
+    return;
+  }
+  for(size_t i =0 ; i<fb->len; i++){
+    imageData += (char)fb->buf[i];
+  }
+  //Serial.print(imageData);
+  esp_camera_fb_return(fb);
+  //오늘의 굴팁, 같이 보내기 힘들면 path param을 쓰자!
+  httpResponseCode =  https.POST(imageData);
+  if(httpResponseCode >0){
+    String response = https.getString();
+    Serial.println(httpResponseCode);
+    Serial.println(response);
+  }else{
+    Serial.print("Error on sending Post: ");
+    Serial.println(httpResponseCode);
+  }
+  https.end();
+}
+
+String sendPhoto2() {
   String getAll;
   String getBody;
 
@@ -212,11 +252,16 @@ String sendPhoto() {
   fb = esp_camera_fb_get();
   if(!fb) {
     Serial.println("Camera capture failed");
+    delay(1000);
+    ESP.restart();
   }
-  String serverName = "http://192.168.0.135";
-  String serverPath = "/fromArduino/image/2";
+  String serverName="192.168.0.135";
+  int serverPort = 8090;
+  String serverPath = "/fromArduino/image/1";
+  
+  Serial.println("Connecting to server: " + serverName);
 
-  if (client.connect(serverPath.c_str(), 8090)) {
+  if (client.connect(serverName.c_str(), serverPort)) {
     Serial.println("Connection successful!");    
     String head = "--RandomNerdTutorials\r\nContent-Disposition: form-data; name=\"imageFile\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
     String tail = "\r\n--RandomNerdTutorials--\r\n";
@@ -236,7 +281,7 @@ String sendPhoto() {
     size_t fbLen = fb->len;
     for (size_t n=0; n<fbLen; n=n+1024) {
       if (n+1024 < fbLen) {
-        client.write(fbBuf, 1024);
+        client.write(fbBuf, 1024); 
         fbBuf += 1024;
       }
       else if (fbLen%1024>0) {
@@ -246,14 +291,27 @@ String sendPhoto() {
     }   
     client.print(tail);
     
-    esp_camera_fb_return(fb);    
+    esp_camera_fb_return(fb);
+    
+    int timoutTimer = 10000;
+    long startTimer = millis();
+    boolean state = false;
+    
+    while ((startTimer + timoutTimer) > millis()) {
+      Serial.print(".");
+      delay(100);      
       while (client.available()) {
         char c = client.read();
         if (c == '\n') {
+          if (getAll.length()==0) { state=true; }
           getAll = "";
         }
         else if (c != '\r') { getAll += String(c); }
+        if (state==true) { getBody += String(c); }
+        startTimer = millis();
       }
+      if (getBody.length()>0) { break; }
+    }
     Serial.println();
     client.stop();
     Serial.println(getBody);
@@ -264,96 +322,78 @@ String sendPhoto() {
   }
   return getBody;
 }
-*/
+
+void sendSensorData(){
+  
+  Serial.println("start to send");
+  HTTPClient https;
+  https.begin(sensorServer);
+  https.addHeader("Content-Type",  "application/json");
+  const size_t CAPACITY = JSON_OBJECT_SIZE(1);
+  StaticJsonDocument<CAPACITY> doc;
+
+  JsonObject object = doc.to<JsonObject>();
+
+  
+  solid_humid = 70;
+  lumen = 50;
+  humidity = 70;
+  thomer = 20;
+  if(1> 0){
+    String command = mySerial.readStringUntil('.');
+    thomer = command.toInt();
+    command = mySerial.readStringUntil('.');
+    humidity = command.toInt();
+    command = mySerial.readStringUntil('.');
+    lumen = command.toInt();
+    command = mySerial.readStringUntil('_');
+    solid_humid = command.toInt();
+    thomer = mySerial.parseInt();
+    humidity = mySerial.parseInt();
+    lumen = mySerial.parseInt();
+    solid_humid = mySerial.parseInt();
+
+    object["crop_no"] = "1";
+    object["thomer"] = String(thomer);
+    object["humidity"] = String(humidity);
+    object["lumen"] = String(lumen);
+    object["solid_humid"] = String(solid_humid);
+    serializeJson(doc,jsonOutput);
+
+    //String httpRequestData = "crop_no="+String(1)+"&thomer="+String(50);
+    Serial.println(String(jsonOutput));
+    //httpResponseCode = https.POST(String(jsonOutput));
+    httpResponseCode = https.sendRequest("POST",String(jsonOutput));
+    if(httpResponseCode >0){
+      String response = https.getString();
+      Serial.println(httpResponseCode);
+      Serial.println(response);
+
+    }else{
+      Serial.print("Error on sending Post: ");
+      Serial.println(httpResponseCode);
+    }
+  }
+  https.end();
+  Serial.println("end to send");
+}
+
 void loop() {
   server.handleClient();
   if(WiFi.status() == WL_CONNECTED){
 
     //Sending Sensor Data
-    WiFiClientSecure *client = new WiFiClientSecure;
-    client -> setInsecure(); //don't use SSL
-    HTTPClient https;
-    https.begin(sensorServer);
-    //https.addHeader("Content-Type",  "application/x-www-form-urlencoded");   //Specify content-type header,  Json형식의 타입이다.
-    https.addHeader("Content-Type",  "application/json");
-    const size_t CAPACITY = JSON_OBJECT_SIZE(1);
-    StaticJsonDocument<CAPACITY> doc;
-
-    JsonObject object = doc.to<JsonObject>();
-
-    
-    solid_humid = 0;
-    lumen = 0;
-    humidity = 0;
-    thomer = 0;
-    if(mySerial.available() > 0){
-      /*String command = mySerial.readStringUntil('.');
-      thomer = command.toInt();
-      command = mySerial.readStringUntil('.');
-      humidity = command.toInt();
-      command = mySerial.readStringUntil('.');
-      lumen = command.toInt();
-      command = mySerial.readStringUntil('_');
-      solid_humid = command.toInt();*/
-      thomer = mySerial.parseInt();
-      humidity = mySerial.parseInt();
-      lumen = mySerial.parseInt();
-      solid_humid = mySerial.parseInt();
-
-      object["crop_no"] = "2";
-      object["thomer"] = String(thomer);
-      object["humidity"] = String(humidity);
-      object["lumen"] = String(lumen);
-      object["solid_humid"] = String(solid_humid);
-      serializeJson(doc,jsonOutput);
-
-      //String httpRequestData = "crop_no="+String(1)+"&thomer="+String(50);
-      Serial.println(String(jsonOutput));
-      httpResponseCode = https.POST(String(jsonOutput));
-      if(httpResponseCode >0){
-        String response = https.getString();
-        Serial.println(httpResponseCode);
-        Serial.println(response);
-
-      }else{
-        Serial.print("Error on sending Post: ");
-        Serial.println(httpResponseCode);
-      }
-    }
-
-    
-    https.end();
+    //sendSensorData();
     
     //Sending Image Data
-    https.begin(imageServer);
-    https.addHeader("Content-Type", "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW");
-    String imageData = "";
-    camera_fb_t *fb = NULL;
-    fb = esp_camera_fb_get();
-    if(!fb){
-      Serial.print("Error on Sending Image");
-    }
-    for(size_t i =0 ; i<fb->len; i++){
-      imageData += (char)fb->buf[i];
-    }
-    Serial.print(imageData);
-    esp_camera_fb_return(fb);
-    //오늘의 굴팁, 같이 보내기 힘들면 path param을 쓰자!
-    httpResponseCode =  https.POST(imageData);
-    if(httpResponseCode >0){
-      String response = https.getString();
-      Serial.println(httpResponseCode);
-      Serial.println(response);
-    }else{
-      Serial.print("Error on sending Post: ");
-      Serial.println(httpResponseCode);
-    }
-    https.end();
+    //sendPhoto2();
     
   }
   //1시간 단위로
   //delay(3600000);
   //테스트용 1분 단위
   delay(60000);
+  //delay(1000);
+  Serial.print("test!");
   
 }
